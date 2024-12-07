@@ -7,7 +7,7 @@ import numpy as np
 from collections import deque
 from torchvision import transforms
 
-# Define the CNN Q-network
+# CNN Model-v3
 class DQNCNN(nn.Module):
     def __init__(self, action_size, stack_size, channels):
         super(DQNCNN, self).__init__()
