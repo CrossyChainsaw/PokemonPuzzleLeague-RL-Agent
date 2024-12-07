@@ -1,26 +1,24 @@
-import gymnasium as gym
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import random
-import numpy as np
-from collections import deque
-from torchvision import transforms
 
-# Define the CNN Q-network
 class DQNCNN(nn.Module):
-    def __init__(self, action_size, stack_size, channels):
+    def __init__(self, action_size, stack_size=1, channels=3):
         super(DQNCNN, self).__init__()
-        # Multiply stack_size by channels to combine dimensions
-        self.conv1 = nn.Conv2d(stack_size * channels, 64, kernel_size=3, stride=2)
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)  # Reduces size further
-        self.fc1 = nn.Linear(64 * 15 * 15, 512)  # Adjust based on input size after convolution and pooling
-        self.fc2 = nn.Linear(512, action_size)
+        
+        # Reduce filter sizes and number of layers for speed
+        self.conv1 = nn.Conv2d(stack_size * channels, 16, kernel_size=3, stride=2)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=2)
+        
+        # Calculate the feature map size manually for fully connected layers
+        self.fc_input_size = 32 * 15 * 15  # Adjust based on output of conv layers
+        
+        # Fully connected layers
+        self.fc1 = nn.Linear(self.fc_input_size, 256)
+        self.fc2 = nn.Linear(256, action_size)
 
     def forward(self, x):
         x = torch.relu(self.conv1(x))
-        x = self.pool(x)  # Apply max pooling to reduce size further
-        x = x.view(x.size(0), -1)  # Flatten the tensor
+        x = torch.relu(self.conv2(x))
+        x = x.view(x.size(0), -1)  # Flatten the tensor for the fully connected layers
         x = torch.relu(self.fc1(x))
         return self.fc2(x)
-
