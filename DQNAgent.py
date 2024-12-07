@@ -28,7 +28,8 @@ class DQNAgent:
         self.q_network = DQNCNN
         self.target_network = DQNCNN
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=0.0001)
-
+        # Define the loss function
+        self.loss_fn = nn.MSELoss()  # Add this line to define the loss function
         # Copy weights from the current network to the target network
         self.target_network.load_state_dict(self.q_network.state_dict())
 
@@ -49,32 +50,45 @@ class DQNAgent:
         if len(self.memory) < self.batch_size:
             return
 
-        minibatch = self.memory.sample(self.batch_size)
-        states, actions, rewards, next_states, dones = zip(*minibatch)
+        # Sample a batch from the replay memory
+        batch = self.memory.sample(self.batch_size)
 
-        # Convert to numpy arrays before converting to tensors
-        states = torch.FloatTensor(np.array(states))
-        next_states = torch.FloatTensor(np.array(next_states))
-        actions = torch.LongTensor(actions)
-        rewards = torch.FloatTensor(rewards)
-        dones = torch.FloatTensor(dones)
+        # Unzip the batch (states, actions, rewards, next_states, dones)
+        states, actions, rewards, next_states, dones = zip(*batch)
+
+        # Convert to numpy arrays
+        states = np.array(states)
+        next_states = np.array(next_states)
+
+        # Reshape states and next_states to [batch_size, stack_size * channels, height, width]
+        states = states.reshape(states.shape[0], -1, states.shape[3], states.shape[4])  # [batch_size, stack_size * channels, height, width]
+        next_states = next_states.reshape(next_states.shape[0], -1, next_states.shape[3], next_states.shape[4])  # Same for next states
+
+        # Convert to torch tensors
+        states = torch.tensor(states, dtype=torch.float32)
+        next_states = torch.tensor(next_states, dtype=torch.float32)
+        actions = torch.tensor(actions, dtype=torch.long)
+        rewards = torch.tensor(rewards, dtype=torch.float32)
+        dones = torch.tensor(dones, dtype=torch.float32)
 
         # Get current Q values
         q_values = self.q_network(states).gather(1, actions.unsqueeze(1)).squeeze(1)
 
         # Get target Q values
         next_q_values = self.target_network(next_states).max(1)[0]
-        target_q_values = rewards + (self.gamma * next_q_values * (1 - dones))
 
-        # Compute loss
-        loss = nn.MSELoss()(q_values, target_q_values.detach())
+        # Compute the target Q values for the current batch
+        target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
+
+        # Compute the loss between predicted Q values and target Q values
+        loss = self.loss_fn(q_values, target_q_values)
+
+        # Backpropagate and update the Q-network
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-        # Update epsilon
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+
 
     def update_target_network(self):
         self.target_network.load_state_dict(self.q_network.state_dict())

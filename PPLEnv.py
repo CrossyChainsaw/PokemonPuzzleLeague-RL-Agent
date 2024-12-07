@@ -34,8 +34,8 @@ class PPLEnv(gym.Env):
         self.preprocessed_screenshot_history = []
 
         # Template Images
-        self.template1_gray = cv2.cvtColor(cv2.imread("temp_img1.png"), cv2.COLOR_BGR2GRAY)
-        self.template2_gray = cv2.cvtColor(cv2.imread("temp_img2.png"), cv2.COLOR_BGR2GRAY)
+        self.template1_gray = cv2.cvtColor(cv2.imread("images/temp_img1.png"), cv2.COLOR_BGR2GRAY)
+        self.template2_gray = cv2.cvtColor(cv2.imread("images/temp_img2.png"), cv2.COLOR_BGR2GRAY)
         # Select preprocessing function based on the mode
         if mode == 'grey':
             self.preprocess_frame = preprocess_frame_grey
