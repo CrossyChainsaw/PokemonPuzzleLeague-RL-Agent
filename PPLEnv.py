@@ -69,9 +69,9 @@ class PPLEnv(gym.Env):
         # Reset the game (you need to implement this part)
         #self.reset_game()
         # Capture the initial screenshot as the initial observation (convert to grayscale)
-        keyboard.press('f1')
+        keyboard.press('f2')
         time.sleep(.025) # wait to release key
-        keyboard.release('f1')
+        keyboard.release('f2')
         time.sleep(2.2) # wait for dolphin to update
         observation = self.get_state()
         return observation, {}
