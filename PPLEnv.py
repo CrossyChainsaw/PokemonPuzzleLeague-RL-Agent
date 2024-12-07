@@ -36,7 +36,8 @@ class PPLEnv(gym.Env):
         # Template Images
         self.template1_gray = cv2.cvtColor(cv2.imread("images/temp_img1.png"), cv2.COLOR_BGR2GRAY)
         self.template2_gray = cv2.cvtColor(cv2.imread("images/temp_img2.png"), cv2.COLOR_BGR2GRAY)
-        self.template3_gray = cv2.cvtColor(cv2.imread("images/temp_img2.png"), cv2.COLOR_BGR2GRAY)
+        self.template3_gray = cv2.cvtColor(cv2.imread("images/temp_img3.png"), cv2.COLOR_BGR2GRAY)
+        self.template4_gray = cv2.cvtColor(cv2.imread("images/temp_img4.png"), cv2.COLOR_BGR2GRAY)
         # Select preprocessing function based on the mode
         if mode == 'grey':
             self.preprocess_frame = preprocess_frame_grey
@@ -84,12 +85,14 @@ class PPLEnv(gym.Env):
         result1 = cv2.matchTemplate(input_gray, self.template1_gray, cv2.TM_CCOEFF_NORMED)
         result2 = cv2.matchTemplate(input_gray, self.template2_gray, cv2.TM_CCOEFF_NORMED)
         result3 = cv2.matchTemplate(input_gray, self.template3_gray, cv2.TM_CCOEFF_NORMED)
+        result4 = cv2.matchTemplate(input_gray, self.template4_gray, cv2.TM_CCOEFF_NORMED)
         # Get the best match positions and scores for both templates
         _, max_val1, _, _ = cv2.minMaxLoc(result1)
         _, max_val2, _, _ = cv2.minMaxLoc(result2)
         _, max_val3, _, _ = cv2.minMaxLoc(result3)
+        _, max_val4, _, _ = cv2.minMaxLoc(result4)
         # Take the maximum accuracy from both templates
-        best_accuracy = max(max_val1, max_val2, max_val3)
+        best_accuracy = max(max_val1, max_val2, max_val3, max_val4)
         # Accuracy Check
         if best_accuracy > 0.8:
             return True
