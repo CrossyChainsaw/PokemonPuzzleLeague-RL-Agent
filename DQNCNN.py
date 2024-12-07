@@ -9,9 +9,9 @@ from torchvision import transforms
 
 # Define the CNN Q-network
 class DQNCNN(nn.Module):
-    def __init__(self, action_size, stack_size):
+    def __init__(self, action_size, stack_size, channels):
         super(DQNCNN, self).__init__()
-        self.conv1 = nn.Conv2d(stack_size, 64, kernel_size=3, stride=2)  # Using default stride and padding
+        self.conv1 = nn.Conv2d(stack_size * channels, 64, kernel_size=3, stride=2)  # Using default stride and padding
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)  # Reduces size further
 
         # Adjust this size based on your calculations
