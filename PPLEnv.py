@@ -11,21 +11,24 @@ from torchvision import transforms
 from collections import deque
 import keyboard
 import pyautogui
+import ctypes
+
+
+from read_memory import get_process_id, read_memory, PROCESS_ALL_ACCESS
 
 class PPLEnv(gym.Env):
-    def __init__(self, state_bbox=(0, 0, 1920, 1080), mode='grey', stack_size=4):
+    def __init__(self, state_bbox=(0, 0, 1920, 1080), color_mode='grey', stack_size=4):
         super(PPLEnv, self).__init__()
+        # Action Space
         self.action_space = spaces.Discrete(6)  # 6 possible actions: W, A, S, D, H, K
 
-        # Bounding box for the state
-        self.bbox = state_bbox
-        self.cloud_bbox_dolphin = (390, 70, 845, 155)
-        self.bottom_left_cell_bbox = (400, 965, 440, 1005)
-        # self.window_handle = find_window(window_title="Pokemon Puzzle League (E) - Project64 3.0.1.5664-2df3434")
+        # Bounding boxes 
+        self.state_bbox = state_bbox # bounding box for state
+        self.bbox_bottom_left_cell_spotlight = (400, 965, 440, 1005) # bounding box for check game over
 
         # Determine the height and width based on the bounding box
-        self.width = self.bbox[2] - self.bbox[0]
-        self.height = self.bbox[3] - self.bbox[1]
+        self.width = self.state_bbox[2] - self.state_bbox[0]
+        self.height = self.state_bbox[3] - self.state_bbox[1]
         self.stack_size = stack_size  # Number of frames to stack
 
         # Initialize the frame stack
@@ -35,20 +38,19 @@ class PPLEnv(gym.Env):
         self.preprocessed_screenshot_history = []
 
         # Template Images
-        # self.template1_gray = cv2.cvtColor(cv2.imread("images/temp_img1.png"), cv2.COLOR_BGR2GRAY)
-        # self.template2_gray = cv2.cvtColor(cv2.imread("images/temp_img2.png"), cv2.COLOR_BGR2GRAY)
-        # self.template3_gray = cv2.cvtColor(cv2.imread("images/temp_img3.png"), cv2.COLOR_BGR2GRAY)
-        # self.template4_gray = cv2.cvtColor(cv2.imread("images/temp_img4.png"), cv2.COLOR_BGR2GRAY)
         self.template_cell_gray = cv2.cvtColor(cv2.imread("images/temp_img_cell.png"), cv2.COLOR_BGR2GRAY)
 
+        # Track episode score for calc reward
+        self.episode_score = 0
+
         # Select preprocessing function based on the mode
-        if mode == 'grey':
+        if color_mode == 'grey':
             self.preprocess_frame = preprocess_frame_grey
             # Grayscale: Single channel
             self.observation_space = spaces.Box(
                 low=0, high=255, shape=(self.height, self.width, 1), dtype=np.uint8
             )
-        elif mode == 'color':
+        elif color_mode == 'color':
             self.preprocess_frame = preprocess_frame_color
             # Color: Three channels (RGB)
             self.observation_space = spaces.Box(
@@ -57,7 +59,25 @@ class PPLEnv(gym.Env):
         else:
             raise ValueError("Invalid mode specified. Use 'grey' or 'color'.")
         
+        # Memory Reading Setup
+        process_name = "DolphinMemoryEngine.exe"
+        process_id = get_process_id(process_name)
+        self.process_handle = ctypes.windll.kernel32.OpenProcess(PROCESS_ALL_ACCESS, False, process_id)
+        base_address = 0x7FF9E8A90000 # Qt6Gui.dll
+        base_offset = 0x006EA868
+        offsets = [0xC38, 0x190, 0x750]
 
+        first_pointer = base_address + base_offset
+        dereferenced_address  = read_memory(self.process_handle, first_pointer, data_type=ctypes.c_uint64)
+        dereferenced_address_hex = (hex(dereferenced_address))
+
+        for offset in offsets:
+            pointer = dereferenced_address + offset
+            dereferenced_address  = read_memory(self.process_handle, pointer)
+            dereferenced_address_hex = (hex(dereferenced_address))
+        self.score_pointer = pointer
+        
+    # FUNCTIONS
     def step(self, action):
         do_action(action=action)                    # do action
         observation = self.get_state() # new state
@@ -66,13 +86,12 @@ class PPLEnv(gym.Env):
         return observation, reward, done, False, {} # return
 
     def reset(self, seed=None, options=None):
-        # Reset the game (you need to implement this part)
-        #self.reset_game()
-        # Capture the initial screenshot as the initial observation (convert to grayscale)
-        keyboard.press('f2')
+        # Restart from save state
+        keyboard.press('f2') # load save state in slot f2
         time.sleep(.025) # wait to release key
         keyboard.release('f2')
         time.sleep(2.2) # wait for dolphin to update
+        self.episode_score = 0 # reset total episode reward
         observation = self.get_state()
         return observation, {}
 
@@ -82,11 +101,15 @@ class PPLEnv(gym.Env):
         return observation
 
     def calculate_reward(self):
-        return 1  
+        total_score = read_memory(self.process_handle, self.score_pointer, data_type=ctypes.c_uint32)
+        reward = total_score - self.episode_score
+        self.episode_score+=reward
+        return reward
+
 
     # should take 0.003s
     def is_game_over(self): 
-        input_img = np.array(ImageGrab.grab(bbox=self.bottom_left_cell_bbox)) # Grab img and convert to numpy array
+        input_img = np.array(ImageGrab.grab(bbox=self.bbox_bottom_left_cell_spotlight)) # Grab img and convert to numpy array
         input_gray = cv2.cvtColor(input_img, cv2.COLOR_RGB2GRAY) # grayscale it
         # Perform template matching for both templates
         result1 = cv2.matchTemplate(input_gray, self.template_cell_gray, cv2.TM_CCOEFF_NORMED)
@@ -106,24 +129,19 @@ class PPLEnv(gym.Env):
         #print(f"Window handle: {window_handle}") # sometimes you might need this line to fix weird win32gui.SetForegroundWindow(window_handle) bug
         win32gui.SetForegroundWindow(self.window_handle)
         # screenshot = ImageGrab.grab() # capture full screen
-        screenshot = ImageGrab.grab(bbox=self.bbox)
+        screenshot = ImageGrab.grab(bbox=self.state_bbox)
         screenshot_np = np.array(screenshot)
         screenshot_np = self.preprocess_frame(screenshot_np)
         return screenshot_np
     
     def get_state(self):
-        # Focus Window
-        # win32gui.SetForegroundWindow(self.window_handle)
         # Grab Screenshot
-        screenshot = ImageGrab.grab(bbox=self.bbox) # PIL
-        # screenshot = pyautogui.screenshot(region=self.bbox) # pyautogui
-        # screenshot = np.array(ImageGrab.grab(bbox=self.bbox)) # cv2
+        screenshot = ImageGrab.grab(bbox=self.state_bbox) # PIL
         # Convert to numpy array
         screenshot_np = np.array(screenshot)
         # Preprocess frame
         screenshot_np = self.preprocess_frame(screenshot_np)
-        self.preprocessed_screenshot_history.append(screenshot_np)
-
+        # self.preprocessed_screenshot_history.append(screenshot_np) # save screenshots for debugging
         # Stack the frame
         self.frames.append(screenshot_np)
         
@@ -141,13 +159,6 @@ class PPLEnv(gym.Env):
         if screenshot_np.ndim == 2:  # Grayscale
             stacked_frames = np.expand_dims(stacked_frames, axis=-1)  # Add channel dimension: [stack_size, height, width, 1]
         return stacked_frames
-
-# def find_window(window_title:str):
-#     # Get the handle of the window
-#     hwnd = win32gui.FindWindow(None, window_title)
-#     if hwnd == 0:
-#         raise Exception(f"Window with title '{window_title}' not found.")
-#     return hwnd
 
 
 def get_score_img():
