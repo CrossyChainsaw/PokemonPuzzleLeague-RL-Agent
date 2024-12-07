@@ -11,11 +11,10 @@ from torchvision import transforms
 class DQNCNN(nn.Module):
     def __init__(self, action_size, stack_size, channels):
         super(DQNCNN, self).__init__()
-        self.conv1 = nn.Conv2d(stack_size * channels, 64, kernel_size=3, stride=2)  # Using default stride and padding
+        # Multiply stack_size by channels to combine dimensions
+        self.conv1 = nn.Conv2d(stack_size * channels, 64, kernel_size=3, stride=2)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)  # Reduces size further
-
-        # Adjust this size based on your calculations
-        self.fc1 = nn.Linear(64 * 15 * 15, 512)
+        self.fc1 = nn.Linear(64 * 15 * 15, 512)  # Adjust based on input size after convolution and pooling
         self.fc2 = nn.Linear(512, action_size)
 
     def forward(self, x):
@@ -24,3 +23,4 @@ class DQNCNN(nn.Module):
         x = x.view(x.size(0), -1)  # Flatten the tensor
         x = torch.relu(self.fc1(x))
         return self.fc2(x)
+

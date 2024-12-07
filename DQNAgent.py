@@ -34,13 +34,16 @@ class DQNAgent:
         self.target_network.load_state_dict(self.q_network.state_dict())
 
     def select_action(self, state, explore=True):
-        # During exploration, select a random action
+        # Combine stack_size and channels dimensions into a single dimension for CNN input
+        state = np.array(state)  # Ensure state is a numpy array
+        state = state.reshape(-1, state.shape[2], state.shape[3])  # Merge stack_size * channels
+        state = torch.FloatTensor(state).unsqueeze(0)  # Add batch dimension
+
         if explore and np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
-        
-        # During exploitation, select the action with the highest Q-value
-        state = torch.FloatTensor(state).unsqueeze(0)  # Convert to tensor and add batch dimension
-        q_values = self.q_network(state)
+
+        with torch.no_grad():  # Turn off gradients during evaluation
+            q_values = self.q_network(state)
         return torch.argmax(q_values).item()
     
     def random_action(self):
@@ -62,7 +65,7 @@ class DQNAgent:
 
         # Reshape states and next_states to [batch_size, stack_size * channels, height, width]
         states = states.reshape(states.shape[0], -1, states.shape[3], states.shape[4])  # [batch_size, stack_size * channels, height, width]
-        next_states = next_states.reshape(next_states.shape[0], -1, next_states.shape[3], next_states.shape[4])  # Same for next states
+        next_states = next_states.reshape(next_states.shape[0], -1, next_states.shape[3], next_states.shape[4])
 
         # Convert to torch tensors
         states = torch.tensor(states, dtype=torch.float32)
@@ -81,12 +84,13 @@ class DQNAgent:
         target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
 
         # Compute the loss between predicted Q values and target Q values
-        loss = self.loss_fn(q_values, target_q_values)
+        loss = self.loss_fn(q_values, target_q_values.detach())  # Detach target_q_values to prevent gradient flow
 
         # Backpropagate and update the Q-network
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+
 
 
 
