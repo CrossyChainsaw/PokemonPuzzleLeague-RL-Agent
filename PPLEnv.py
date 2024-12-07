@@ -16,32 +16,35 @@ import ctypes
 
 from read_memory import get_process_id, read_memory, PROCESS_ALL_ACCESS
 
+import time
+import gymnasium as gym
+from gymnasium import spaces
+import numpy as np
+from PIL import ImageGrab, Image
+import pyautogui
+import win32gui
+import cv2
+import win32con
+from torchvision import transforms
+from collections import deque
+import keyboard
+import pyautogui
+import ctypes
+
+
+from read_memory import get_process_id, read_memory, PROCESS_ALL_ACCESS
+
 class PPLEnv(gym.Env):
-    def __init__(self, state_bbox=(0, 0, 1920, 1080), color_mode='grey', stack_size=4):
+    def __init__(self, state_bbox=(0, 0, 1920, 1080), color_mode='grey'):
         super(PPLEnv, self).__init__()
-        # Action Space
         self.action_space = spaces.Discrete(6)  # 6 possible actions: W, A, S, D, H, K
 
-        # Bounding boxes 
-        self.state_bbox = state_bbox # bounding box for state
-        self.bbox_bottom_left_cell_spotlight = (400, 965, 440, 1005) # bounding box for check game over
-
-        # Determine the height and width based on the bounding box
+        self.state_bbox = state_bbox
         self.width = self.state_bbox[2] - self.state_bbox[0]
         self.height = self.state_bbox[3] - self.state_bbox[1]
-        self.stack_size = stack_size  # Number of frames to stack
 
-        # Initialize the frame stack
-        self.frames = deque(maxlen=self.stack_size)
-
-        # Screenshot History
-        self.preprocessed_screenshot_history = []
-
-        # Template Images
-        self.template_cell_gray = cv2.cvtColor(cv2.imread("images/temp_img_cell.png"), cv2.COLOR_BGR2GRAY)
-
-        # Track episode score for calc reward
-        self.episode_score = 0
+        # No frame stacking anymore, so no need for deque or stack_size
+        self.stack_size = 1
 
         # Select preprocessing function based on the mode
         if color_mode == 'grey':
@@ -59,7 +62,7 @@ class PPLEnv(gym.Env):
         else:
             raise ValueError("Invalid mode specified. Use 'grey' or 'color'.")
         
-        # Memory Reading Setup
+        # Memory Reading Setup (unchanged)
         process_name = "DolphinMemoryEngine.exe"
         process_id = get_process_id(process_name)
         self.process_handle = ctypes.windll.kernel32.OpenProcess(PROCESS_ALL_ACCESS, False, process_id)
@@ -137,29 +140,12 @@ class PPLEnv(gym.Env):
     
     def get_state(self):
         # Grab Screenshot
-        screenshot = ImageGrab.grab(bbox=self.state_bbox) # PIL
+        screenshot = ImageGrab.grab(bbox=self.state_bbox)  # PIL
         # Convert to numpy array
         screenshot_np = np.array(screenshot)
         # Preprocess frame
         screenshot_np = self.preprocess_frame(screenshot_np)
-        self.preprocessed_screenshot_history.append(screenshot_np) # save screenshots for debugging
-        # Stack the frame
-        self.frames.append(screenshot_np)
-        
-        # If we don't have enough frames yet, fill with zeros
-        while len(self.frames) < self.stack_size:
-            if screenshot_np.ndim == 2:  # Greyscale frame
-                self.frames.append(np.zeros_like(screenshot_np))
-            else:  # Color frame
-                self.frames.append(np.zeros_like(screenshot_np))
-
-        # Stack frames into a single tensor of shape (stack_size, height, width, channels)
-        stacked_frames = np.stack(list(self.frames), axis=0)  # Shape: [stack_size, height, width, channels]
-        
-        # Adjust the channel dimension
-        if screenshot_np.ndim == 2:  # Grayscale
-            stacked_frames = np.expand_dims(stacked_frames, axis=-1)  # Add channel dimension: [stack_size, height, width, 1]
-        return stacked_frames
+        return screenshot_np
 
 
 def get_score_img():
