@@ -93,6 +93,7 @@ class PPLEnv(gym.Env):
         time.sleep(2.2) # wait for dolphin to update
         self.episode_score = 0 # reset total episode reward
         observation = self.get_state()
+        self.preprocessed_screenshot_history = [] # resetting history to prevent extremely large arrays of images
         return observation, {}
 
     def render(self):
@@ -141,7 +142,7 @@ class PPLEnv(gym.Env):
         screenshot_np = np.array(screenshot)
         # Preprocess frame
         screenshot_np = self.preprocess_frame(screenshot_np)
-        # self.preprocessed_screenshot_history.append(screenshot_np) # save screenshots for debugging
+        self.preprocessed_screenshot_history.append(screenshot_np) # save screenshots for debugging
         # Stack the frame
         self.frames.append(screenshot_np)
         
