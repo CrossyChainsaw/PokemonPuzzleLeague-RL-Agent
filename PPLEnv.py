@@ -16,35 +16,32 @@ import ctypes
 
 from read_memory import get_process_id, read_memory, PROCESS_ALL_ACCESS
 
-import time
-import gymnasium as gym
-from gymnasium import spaces
-import numpy as np
-from PIL import ImageGrab, Image
-import pyautogui
-import win32gui
-import cv2
-import win32con
-from torchvision import transforms
-from collections import deque
-import keyboard
-import pyautogui
-import ctypes
-
-
-from read_memory import get_process_id, read_memory, PROCESS_ALL_ACCESS
-
 class PPLEnv(gym.Env):
-    def __init__(self, state_bbox=(0, 0, 1920, 1080), color_mode='grey'):
+    def __init__(self, state_bbox=(0, 0, 1920, 1080), color_mode='grey', stack_size=4):
         super(PPLEnv, self).__init__()
+        # Action Space
         self.action_space = spaces.Discrete(6)  # 6 possible actions: W, A, S, D, H, K
 
-        self.state_bbox = state_bbox
+        # Bounding boxes 
+        self.state_bbox = state_bbox # bounding box for state
+        self.bbox_bottom_left_cell_spotlight = (400, 965, 440, 1005) # bounding box for check game over
+
+        # Determine the height and width based on the bounding box
         self.width = self.state_bbox[2] - self.state_bbox[0]
         self.height = self.state_bbox[3] - self.state_bbox[1]
+        self.stack_size = stack_size  # Number of frames to stack
 
-        # No frame stacking anymore, so no need for deque or stack_size
-        self.stack_size = 1
+        # Initialize the frame stack
+        self.frames = deque(maxlen=self.stack_size)
+
+        # Screenshot History
+        self.preprocessed_screenshot_history = []
+
+        # Template Images
+        self.template_cell_gray = cv2.cvtColor(cv2.imread("images/temp_img_cell.png"), cv2.COLOR_BGR2GRAY)
+
+        # Track episode score for calc reward
+        self.episode_score = 0
 
         # Select preprocessing function based on the mode
         if color_mode == 'grey':
@@ -62,7 +59,7 @@ class PPLEnv(gym.Env):
         else:
             raise ValueError("Invalid mode specified. Use 'grey' or 'color'.")
         
-        # Memory Reading Setup (unchanged)
+        # Memory Reading Setup
         process_name = "DolphinMemoryEngine.exe"
         process_id = get_process_id(process_name)
         self.process_handle = ctypes.windll.kernel32.OpenProcess(PROCESS_ALL_ACCESS, False, process_id)
@@ -174,23 +171,6 @@ def press_and_release(key=None):
     keyboard.press(key)
     time.sleep(.025)
     keyboard.release(key)
-
-# split up in color and not ig 
-def check_score(image, template_path='0_temp.png'):
-    # # Load template (image of "0")
-    # template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)  # Read template as grayscale
-
-    # # Convert the game screen to grayscale
-    # gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # # Match template
-    # result = cv2.matchTemplate(gray_image, template, cv2.TM_CCOEFF_NORMED)
-
-    # # Get the best match position and value
-    # _, max_val, _, _ = cv2.minMaxLoc(result)
-
-    # return max_val
-    return 0
 
 # Preprocess the frames (resize and convert to grayscale)
 def preprocess_frame_color(frame):
