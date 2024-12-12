@@ -1,1 +1,1 @@
-Didn't see any interesting results yet. Consider to convert the state into numeric values rather than images maybe?
+Biggest issue is that the model cannot see where the cursor is.
