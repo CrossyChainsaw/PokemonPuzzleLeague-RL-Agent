@@ -20,7 +20,10 @@ class PPLEnv(gym.Env):
     def __init__(self, state_bbox=(0, 0, 1920, 1080), color_mode='grey', stack_size=4):
         super(PPLEnv, self).__init__()
         # Action Space
-        self.action_space = spaces.Discrete(6)  # 6 possible actions: W, A, S, D, H, K
+        self.action_space = spaces.Discrete(5)  # 6 possible actions: W, A, S, D, H, K
+
+        # Image Size
+        self.img_size_color = (60, 60)
 
         # Bounding boxes 
         self.state_bbox = state_bbox # bounding box for state
@@ -35,6 +38,7 @@ class PPLEnv(gym.Env):
         self.frames = deque(maxlen=self.stack_size)
 
         # Screenshot History
+        self.screenshot_history = []
         self.preprocessed_screenshot_history = []
 
         # Template Images
@@ -63,9 +67,9 @@ class PPLEnv(gym.Env):
         process_name = "DolphinMemoryEngine.exe"
         process_id = get_process_id(process_name)
         self.process_handle = ctypes.windll.kernel32.OpenProcess(PROCESS_ALL_ACCESS, False, process_id)
-        base_address = 0x7FF9E8A90000 # Qt6Gui.dll
-        base_offset = 0x006EA868
-        offsets = [0xC38, 0x190, 0x750]
+        base_address = 0x7FFA08340000 #"Qt6Gui.dll" 7FFA08340000 - Qt6Gui.dll
+        base_offset = 0x006EB448
+        offsets = [0x80, 0xE30]
 
         first_pointer = base_address + base_offset
         dereferenced_address  = read_memory(self.process_handle, first_pointer, data_type=ctypes.c_uint64)
@@ -126,22 +130,13 @@ class PPLEnv(gym.Env):
         state = self.get_state()
         return state
     
-    def get_state_old(self):
-        #print(f"Window handle: {window_handle}") # sometimes you might need this line to fix weird win32gui.SetForegroundWindow(window_handle) bug
-        win32gui.SetForegroundWindow(self.window_handle)
-        # screenshot = ImageGrab.grab() # capture full screen
-        screenshot = ImageGrab.grab(bbox=self.state_bbox)
-        screenshot_np = np.array(screenshot)
-        screenshot_np = self.preprocess_frame(screenshot_np)
-        return screenshot_np
-    
     def get_state(self):
         # Grab Screenshot
         screenshot = ImageGrab.grab(bbox=self.state_bbox)  # PIL
-        # Convert to numpy array
+        self.screenshot_history.append(screenshot)
         screenshot_np = np.array(screenshot)
-        # Preprocess frame
-        screenshot_np = self.preprocess_frame(screenshot_np)
+        screenshot_np = self.preprocess_frame(screenshot_np, self.img_size_color)
+        self.preprocessed_screenshot_history.append(screenshot_np)
         return screenshot_np
 
 
@@ -163,8 +158,8 @@ def do_action(action:int):
         press_and_release('d')  # Press and release 'd'
     elif action == 4:
         press_and_release('h')  # Press and release 'h'
-    elif action == 5:
-        press_and_release('k')  # Press and release 'k'
+    # elif action == 5:
+    #     press_and_release('k')  # Press and release 'k'
 
 
 def press_and_release(key=None):
@@ -173,11 +168,11 @@ def press_and_release(key=None):
     keyboard.release(key)
 
 # Preprocess the frames (resize and convert to grayscale)
-def preprocess_frame_color(frame):
+def preprocess_frame_color(frame, img_size_color):
     transform = transforms.Compose([
         transforms.ToPILImage(),
         # transforms.Grayscale(),  # Convert to grayscale
-        transforms.Resize((64, 64)),  # Resize to 84x84
+        transforms.Resize(img_size_color),  # Resize to 84x84
         transforms.ToTensor(),  # Convert to tensor, will have shape [1, 84, 84]
     ])
     return transform(frame).squeeze(0)  # Remove the single channel dimension, resulting in [84, 84]
